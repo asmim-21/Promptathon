@@ -1,50 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getChallenges } from "../api";
-
-const FALLBACK = {
-  GWM: {
-    title: "Summarize a client’s portfolio review",
-    task:
-      "Write a prompt that asks an LLM to summarize a client's last quarter portfolio performance, highlight risk exposures, and propose 2 actionable rebalancing suggestions.",
-    examples: [
-      { input: "Holdings: 40% equities (US large-cap), 40% bonds (IG), 20% cash. Q3 perf: +2.1%" },
-      { input: "Client risk: Moderate; Constraints: no energy sector >10%" },
-    ],
-  },
-  IB: {
-    title: "Deal teaser extraction",
-    task:
-      "Craft a prompt to extract the 5 most compelling selling points from a deal teaser PDF, with bullet points capped at 20 words each.",
-    examples: [
-      { input: "Sector: FinTech; Geography: APAC; Revenue: $120M; Growth: 35% YoY" },
-      { input: "Differentiators: proprietary fraud engine; 200+ enterprise clients" },
-    ],
-  },
-  AM: {
-    title: "ESG highlights generator",
-    task: "Create a prompt that turns raw KPI data into a concise ESG summary paragraph for a fund factsheet.",
-    examples: [
-      { input: "Carbon intensity: -18% vs benchmark; Board diversity: 42%" },
-      { input: "Engagements: 23; Exclusions: thermal coal >25% revenue" },
-    ],
-  },
-  "Group Functions": {
-    title: "Policy Q&A author",
-    task:
-      "Write a prompt to convert a long internal policy into a Q&A with clear, compliance-friendly answers and citations to sections.",
-    examples: [
-      { input: "Policy: Travel & Expenses v3.2; Sections 4, 7 most asked" },
-      { input: "Audience: new hires; Tone: plain language" },
-    ],
-  },
-  Tech: {
-    title: "Bug report triage",
-    task:
-      "Design a prompt that classifies bug reports by severity, extracts reproduction steps, and suggests an owner team.",
-    examples: [{ input: "Report: 'App crashes when uploading CSV > 5MB'" }, { input: "Modules: Upload service, Parser, UI" }],
-  },
-};
+import { getChallenges, evaluatePrompt, submitResult } from "../api";
 
 export default function Challenge() {
   const nav = useNavigate();
@@ -54,6 +10,7 @@ export default function Challenge() {
   const [challenges, setChallenges] = useState({});
   const [prompt, setPrompt] = useState("");
   const [score, setScore] = useState(null);
+  const [responseText, setResponseText] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -66,9 +23,9 @@ export default function Challenge() {
       .then((d) => {
         if (!mounted) return;
         const data = d?.challenges;
-        setChallenges(data && Object.keys(data).length ? data : FALLBACK);
+        setChallenges(data || {});
       })
-      .catch(() => setChallenges(FALLBACK));
+      .catch(() => setChallenges({}));
     return () => (mounted = false);
   }, []);
 
@@ -86,16 +43,55 @@ export default function Challenge() {
     return Math.min(100, base + bonus);
   }
 
+  // track when the user started editing / viewing the prompt area to measure elapsed
+  const [startedAt, setStartedAt] = useState(null);
+
+  useEffect(() => {
+    // set start timestamp when component mounts or when prompt editing begins
+    setStartedAt(Date.now());
+  }, []);
+
   async function onSubmit() {
     if (!prompt.trim()) {
       alert("Please write a prompt first.");
       return;
     }
     setSubmitting(true);
-    const s = localScore(prompt.trim());
-    await new Promise((r) => setTimeout(r, 300));
-    setScore(s);
-    setSubmitting(false);
+    try {
+      const res = await evaluatePrompt(prompt.trim());
+      if (res && res.ok) {
+        setScore(res.score ?? localScore(prompt.trim()));
+        setResponseText(res.response ?? null);
+      } else {
+        // fallback to local scoring
+        setScore(localScore(prompt.trim()));
+        setResponseText(null);
+      }
+    } catch (err) {
+      // network or server error -> fallback
+      setScore(localScore(prompt.trim()));
+      setResponseText(null);
+    } finally {
+      setSubmitting(false);
+      // compute elapsed time in seconds and submit the result to backend
+      try {
+        const elapsedMs = startedAt ? Date.now() - startedAt : 0;
+        const elapsedSeconds = Math.round(elapsedMs / 1000);
+        const payload = {
+          name: name || "",
+          category: category || "",
+          prompt: prompt,
+          score: score != null ? score : localScore(prompt),
+          elapsed_seconds: elapsedSeconds,
+          response: responseText || "",
+        };
+        // fire-and-forget, but await to ensure it was saved when possible
+        await submitResult(payload);
+      } catch (e) {
+        // ignore submit errors for now
+        console.warn("failed to submit result", e);
+      }
+    }
   }
 
   return (
@@ -137,6 +133,12 @@ export default function Challenge() {
           {score != null && (
             <div className="help" style={{ textAlign: "left" }}>
               Your score: <b style={{ color: "var(--text)" }}>{score}</b> / 100
+              {responseText && (
+                <div style={{ marginTop: 8 }}>
+                  <h5 style={{ margin: "6px 0" }}>LLM response</h5>
+                  <div className="panel" style={{ whiteSpace: "pre-wrap" }}>{responseText}</div>
+                </div>
+              )}
             </div>
           )}
         </div>
