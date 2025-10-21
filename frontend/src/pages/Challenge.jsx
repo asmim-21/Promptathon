@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getChallenges, evaluatePrompt, submitResult } from "../api";
+import { getChallenges, gradePrompt } from "../api";
 
 export default function Challenge() {
   const nav = useNavigate();
@@ -12,6 +12,7 @@ export default function Challenge() {
   const [score, setScore] = useState(null);
   const [responseText, setResponseText] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!name || !category) nav("/");
@@ -31,66 +32,41 @@ export default function Challenge() {
 
   const challenge = useMemo(() => challenges[category] || null, [challenges, category]);
 
-  function localScore(text) {
-    if (!text) return 0;
-    const length = text.split(/\s+/).filter(Boolean).length;
-    const hasBullets = /\n(\-|\*|•)\s/.test(text);
-    const hasNumbers = /\b1\.\s|\b2\.\s|\b3\.\s/.test(text);
-    const hasConstraints = /(constraints|limit|cap at|no more than|exactly|format)/i.test(text);
-    const hasRoles = /(you are|act as|role:|system:)/i.test(text);
-    const base = Math.min(60, Math.max(10, length));
-    const bonus = (hasBullets ? 10 : 0) + (hasNumbers ? 10 : 0) + (hasConstraints ? 10 : 0) + (hasRoles ? 10 : 0);
-    return Math.min(100, base + bonus);
-  }
-
-  // track when the user started editing / viewing the prompt area to measure elapsed
-  const [startedAt, setStartedAt] = useState(null);
-
-  useEffect(() => {
-    // set start timestamp when component mounts or when prompt editing begins
-    setStartedAt(Date.now());
-  }, []);
+  // Track when user landed on page / began composing (for elapsed_seconds)
+  const [startedAt] = useState(() => Date.now());
 
   async function onSubmit() {
-    if (!prompt.trim()) {
+    const trimmed = prompt.trim();
+    if (!trimmed) {
       alert("Please write a prompt first.");
       return;
     }
     setSubmitting(true);
+    setError("");
+    setScore(null);
+    setResponseText(null);
+
+    const elapsed_seconds = Math.round((Date.now() - startedAt) / 1000);
+
     try {
-      const res = await evaluatePrompt(prompt.trim());
-      if (res && res.ok) {
-        setScore(res.score ?? localScore(prompt.trim()));
-        setResponseText(res.response ?? null);
-      } else {
-        // fallback to local scoring
-        setScore(localScore(prompt.trim()));
-        setResponseText(null);
+      const res = await gradePrompt({ name, category, prompt: trimmed, elapsed_seconds });
+
+      if (!res?.ok) {
+        setError(res?.error || "Grading failed");
+        return;
       }
-    } catch (err) {
-      // network or server error -> fallback
-      setScore(localScore(prompt.trim()));
-      setResponseText(null);
+
+      const finalScore = res.score ?? res.details?.overall_score ?? null;
+      setScore(finalScore);
+
+      // Optional: show model output from first test case
+      const sampleOut = res.details?.cases?.[0]?.model_output || null;
+      setResponseText(sampleOut);
+    } catch (e) {
+      console.warn(e);
+      setError("Network error while grading.");
     } finally {
       setSubmitting(false);
-      // compute elapsed time in seconds and submit the result to backend
-      try {
-        const elapsedMs = startedAt ? Date.now() - startedAt : 0;
-        const elapsedSeconds = Math.round(elapsedMs / 1000);
-        const payload = {
-          name: name || "",
-          category: category || "",
-          prompt: prompt,
-          score: score != null ? score : localScore(prompt),
-          elapsed_seconds: elapsedSeconds,
-          response: responseText || "",
-        };
-        // fire-and-forget, but await to ensure it was saved when possible
-        await submitResult(payload);
-      } catch (e) {
-        // ignore submit errors for now
-        console.warn("failed to submit result", e);
-      }
     }
   }
 
@@ -108,15 +84,32 @@ export default function Challenge() {
       <p className="subtitle" style={{ marginTop: 8 }}>{challenge?.task}</p>
 
       <div className="grid-2" style={{ marginTop: 12 }}>
+        {/* Examples panel: now shows Input + Output (if present) */}
         <div className="panel">
-          <h4 style={{ marginTop: 0 }}>Example Inputs</h4>
-          <ul style={{ marginTop: 8 }}>
-            {(challenge?.examples || []).map((e, i) => (
-              <li key={i}><code>{e.input}</code></li>
+          <h4 style={{ marginTop: 0 }}>Example Inputs & Outputs</h4>
+          <div style={{ display: "grid", gap: 12 }}>
+            {(challenge?.examples || []).map((ex, i) => (
+              <div key={i} className="panel" style={{ padding: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.7, marginBottom: 4 }}>Example {i + 1} — Input</div>
+                <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                  {ex.input}
+                </pre>
+
+                {"output" in ex && ex.output && (
+                  <>
+                    <div style={{ height: 8 }} />
+                    <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.7, marginBottom: 4 }}>Example {i + 1} — Output</div>
+                    <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                      {ex.output}
+                    </pre>
+                  </>
+                )}
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
 
+        {/* Prompt authoring panel */}
         <div className="panel">
           <h4 style={{ marginTop: 0 }}>Your Prompt</h4>
           <textarea
@@ -130,12 +123,13 @@ export default function Challenge() {
           <button className="btn btn--primary" onClick={onSubmit} disabled={submitting} style={{ marginTop: 12 }}>
             {submitting ? "Scoring…" : "Submit"}
           </button>
+          {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
           {score != null && (
             <div className="help" style={{ textAlign: "left" }}>
               Your score: <b style={{ color: "var(--text)" }}>{score}</b> / 100
               {responseText && (
                 <div style={{ marginTop: 8 }}>
-                  <h5 style={{ margin: "6px 0" }}>LLM response</h5>
+                  <h5 style={{ margin: "6px 0" }}>LLM response (sample from test case 1)</h5>
                   <div className="panel" style={{ whiteSpace: "pre-wrap" }}>{responseText}</div>
                 </div>
               )}

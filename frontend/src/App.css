@@ -174,6 +174,47 @@ body {
   box-shadow: inset 0 2px 6px rgba(0,0,0,0.06);
 }
 
+/* Leaderboard header: title left, controls right */
+.leaderboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.leaderboard-title {
+  margin: 0;
+  font-size: 22px;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Compact variant for filters when placed in the header */
+.input--compact {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  text-align: left;
+  box-shadow: 0 6px 18px rgba(16,24,40,0.06), 0 2px 6px rgba(16,24,40,0.04);
+  border: 1px solid rgba(16,24,40,0.06);
+}
+
+/* Make the select look consistent with input */
+select.input--compact { appearance: none; -webkit-appearance: none; -moz-appearance: none; }
+
+@media (max-width: 720px) {
+  .leaderboard-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .filters { justify-content: flex-start; }
+  .input--compact { width: 100%; }
+}
+
 .btn {
   padding: 12px 18px;
   border-radius: 12px;

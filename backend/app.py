@@ -1,101 +1,219 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-import os
-import math
+import os, json, time, csv
 import requests
-import json
 from pathlib import Path
-import csv
-from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
-CORS(app)  # allow requests from the React dev server
+CORS(app)
 
+# ---- Config ----
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "").rstrip("/")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-oss")
+
+CHALLENGES_JSON = os.getenv("CHALLENGES_JSON", "challenges.json")
+RESULTS_SUBMISSIONS_CSV = os.getenv("RESULTS_SUBMISSIONS_CSV", "promptathon_submissions.csv")
+RESULTS_CASES_CSV = os.getenv("RESULTS_CASES_CSV", "promptathon_cases.csv")
+
+def load_challenges():
+    with open(CHALLENGES_JSON, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def ensure_csv_headers():
+    if not os.path.exists(RESULTS_SUBMISSIONS_CSV):
+        with open(RESULTS_SUBMISSIONS_CSV, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["ts","name","category","challenge_id","title","score","elapsed_seconds","prompt"])
+    if not os.path.exists(RESULTS_CASES_CSV):
+        with open(RESULTS_CASES_CSV, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["ts","name","category","challenge_id","case_index","input","expected","model_output","judge_score","judge_reason"])
+
+def call_router(messages, temperature=0.2, max_tokens=800):
+    if not LLM_BASE_URL:
+        raise RuntimeError("LLM_BASE_URL not configured")
+    headers = {"Content-Type": "application/json"}
+    if LLM_API_KEY:
+        headers["Authorization"] = f"Bearer {LLM_API_KEY}"
+    payload = {
+        "model": LLM_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": False
+    }
+    r = requests.post(LLM_BASE_URL, json=payload, headers=headers)
+    r.raise_for_status()
+    data = r.json()
+    try:
+        return data["choices"][0]["message"]["content"]
+    except Exception:
+        return json.dumps(data)
+
+# ----- Simple 2-pass pipeline -----
+def generate_with_user_prompt(user_prompt: str, case_input: str) -> str:
+    """Ask the model to apply the user's prompt to a given INPUT."""
+    messages = [
+        {"role": "system", "content": "Follow the user's prompt exactly. Produce only the requested output."},
+        {"role": "user", "content": f"{user_prompt}\n\n---\nINPUT:\n{case_input}"}
+    ]
+    return call_router(messages, temperature=0.2, max_tokens=800).strip()
+
+def judge_output(task: str, expected: str, model_output: str) -> dict:
+    """
+    Ask the model to score the output 0-100 with a short reason.
+    We ask for strict JSON to make parsing robust.
+    """
+
+    judge_instructions = f"""
+You are a strict evaluator. Score how well the candidate OUTPUT satisfies the TASK compared to the EXPECTED_OUTPUT (conceptual target), on a 0-100 scale.
+
+Guidelines:
+- 100 = matches all key requirements and closely aligns with the expected structure/content.
+- 70-90 = mostly correct with minor issues.
+- 40-60 = partially addresses.
+- 0-30 = poor or irrelevant.
+Return STRICT JSON: {{"score": <integer 0-100>, "reason": "<brief reason>"}}
+"""
+
+    user_block = f"""TASK:
+{task}
+
+EXPECTED_OUTPUT (conceptual target):
+{expected}
+
+CANDIDATE OUTPUT:
+{model_output}
+"""
+    messages = [
+        {"role": "system", "content": judge_instructions},
+        {"role": "user", "content": user_block}
+    ]
+    raw = call_router(messages, temperature=0.0, max_tokens=300)
+    # Try to parse JSON; if it fails, attempt a loose fallback.
+    score, reason = 0, "Could not parse judge response."
+    try:
+        # common case: the model returns a JSON object
+        parsed = json.loads(raw)
+        score = int(parsed.get("score", 0))
+        reason = str(parsed.get("reason", "")).strip() or reason
+    except Exception:
+        # try to find a JSON object substring
+        try:
+            start = raw.find("{")
+            end = raw.rfind("}")
+            if start != -1 and end != -1:
+                parsed = json.loads(raw[start:end+1])
+                score = int(parsed.get("score", 0))
+                reason = str(parsed.get("reason", "")).strip() or reason
+        except Exception:
+            reason = f"Judge raw: {raw[:200]}"
+    # clamp score
+    score = max(0, min(100, score))
+    return {"score": score, "reason": reason}
+
+def grade_prompt(category: str, user_prompt: str):
+    challenges = load_challenges()
+    meta = challenges.get(category)
+    if not meta:
+        raise ValueError(f"Unknown category: {category}")
+
+    results = []
+    case_scores = []
+    for idx, case in enumerate(meta.get("test_cases", []), start=1):
+        model_out = generate_with_user_prompt(user_prompt, case["input"])
+        verdict = judge_output(meta["task"], case["expected"], model_out)
+        case_scores.append(verdict["score"])
+        results.append({
+            "case_index": idx,
+            "input": case["input"],
+            "expected": case["expected"],
+            "model_output": model_out,
+            "judge_score": verdict["score"],
+            "judge_reason": verdict["reason"]
+        })
+
+    overall = round(sum(case_scores) / len(case_scores), 2) if case_scores else 0.0
+    return {
+        "challenge_id": meta.get("id"),
+        "title": meta.get("title"),
+        "task": meta.get("task"),
+        "overall_score": overall,
+        "cases": results
+    }
+
+def append_to_csv(result: dict, name: str, category: str, user_prompt: str, elapsed_seconds: int):
+    ensure_csv_headers()
+    ts = int(time.time())
+    # submissions.csv
+    with open(RESULTS_SUBMISSIONS_CSV, "a", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow([ts, name, category, result["challenge_id"], result["title"], result["overall_score"], elapsed_seconds, user_prompt])
+    # cases.csv
+    with open(RESULTS_CASES_CSV, "a", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        for c in result["cases"]:
+            w.writerow([
+                ts, name, category, result["challenge_id"], c["case_index"],
+                c["input"], c["expected"], c["model_output"], c["judge_score"], c["judge_reason"]
+            ])
+
+# ----- API -----
 @app.get("/api/health")
 def health():
     return jsonify({"ok": True})
 
 @app.get("/api/categories")
 def categories():
-    return jsonify({"categories": ["Wealth Management", "Asset Management", "GOTO", "Global Markets", "Global Banking", "Global Research", "Finance", "Compliance", "Operations"]})
+    data = load_challenges()
+    return jsonify({"categories": list(data.keys())})
 
 @app.get("/api/challenges")
 def challenges():
-    # Load challenges from JSON file placed next to this app.py
+    data = load_challenges()
+    public = {}
+    for k, v in data.items():
+        public[k] = {
+            "id": v.get("id"),
+            "title": v.get("title"),
+            "task": v.get("task"),
+            "examples": v.get("examples", [])
+        }
+    return jsonify({"challenges": public})
+
+@app.post("/api/grade")
+def api_grade():
+    """
+    JSON: { "name": "...", "category": "GWM", "prompt": "..." }
+    """
+    body = request.get_json(silent=True) or {}
+    name = (body.get("name") or "").strip()
+    category = body.get("category")
+    prompt = (body.get("prompt") or "").strip()
+    elapsed_seconds = int(body.get("elapsed_seconds") or 0) 
+
+    if not name or not category or not prompt:
+        return jsonify({"ok": False, "error": "Missing name, category, or prompt"}), 400
     try:
-        base = Path(__file__).resolve().parent
-        with open(base / "challenges.json", "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-        return jsonify({"challenges": data})
+        result = grade_prompt(category, prompt)
+        append_to_csv(result, name, category, prompt, elapsed_seconds)
+        return jsonify({"ok": True, "score": result["overall_score"], "details": result})
+    except requests.Timeout:
+        return jsonify({"ok": False, "error": "LLM request timed out"}), 504
     except Exception as e:
-        print("Failed to load challenges.json:", e)
-        return jsonify({"challenges": {}})
-
-def score_text(text: str) -> int:
-    if not text:
-        return 0
-    length = len([w for w in text.split() if w.strip()])
-    has_bullets = bool(__import__('re').search(r"\n(\-|\*|•)\s", text))
-    has_numbers = bool(__import__('re').search(r"\b1\.\s|\b2\.\s|\b3\.\s", text))
-    has_constraints = bool(__import__('re').search(r"(constraints|limit|cap at|no more than|exactly|format)", text, __import__('re').IGNORECASE))
-    has_roles = bool(__import__('re').search(r"(you are|act as|role:|system:)", text, __import__('re').IGNORECASE))
-    base = min(60, max(10, length))
-    bonus = (10 if has_bullets else 0) + (10 if has_numbers else 0) + (10 if has_constraints else 0) + (10 if has_roles else 0)
-    return min(100, base + bonus)
-
-
-@app.post("/api/evaluate")
-def evaluate():
-    payload = request.json or {}
-    prompt = payload.get("prompt", "")
-    # If an LLM integration is provided via env, forward a simple request and attempt to parse text
-    openai_key = os.getenv("OPENAI_API_KEY")
-    openai_url = os.getenv("OPENAI_API_URL")
-
-    if openai_key and openai_url:
-        try:
-            headers = {"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"}
-            body = {"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}], "max_tokens": 256}
-            r = requests.post(openai_url, json=body, headers=headers, timeout=10)
-            r.raise_for_status()
-            jr = r.json()
-            # attempt to extract text from known shapes (OpenAI chat/completions)
-            text = ""
-            if isinstance(jr, dict):
-                # OpenAI chat completion
-                if jr.get("choices"):
-                    ch = jr["choices"][0]
-                    text = ch.get("message", {}).get("content") or ch.get("text") or ""
-                elif jr.get("data"):
-                    # some embeddings/other responses
-                    text = jr.get("data")[0].get("text", "")
-            score = score_text(text) if text else score_text(prompt)
-            return jsonify({"ok": True, "score": score, "response": text})
-        except Exception as e:
-            # fall through to local scoring on error
-            print("LLM request failed:", e)
-
-    # Fallback: local scoring and a canned response
-    s = score_text(prompt)
-    resp = "(mock response) Received prompt and scored locally."
-    return jsonify({"ok": True, "score": s, "response": resp})
-
-
-@app.post("/api/echo")
-def echo():
-    data = request.json or {}
-    return jsonify({"you_sent": data})
-
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.get("/api/leaderboard")
 def leaderboard():
     # Read submissions from CSV (created by /api/submit) and return sorted leaderboard
-    base = Path(__file__).resolve().parent
-    csv_path = base / "submissions.csv"
     rows = []
-    if csv_path.exists():
+    if os.path.exists(RESULTS_SUBMISSIONS_CSV):
         try:
-            with open(csv_path, "r", encoding="utf-8", newline="") as fh:
+            with open(RESULTS_SUBMISSIONS_CSV, "r", encoding="utf-8", newline="") as fh:
                 reader = csv.DictReader(fh)
                 for r in reader:
                     # parse numeric fields
@@ -125,53 +243,6 @@ def leaderboard():
 
     rows_sorted = sorted(rows, key=sort_key)
     return jsonify({"leaderboard": rows_sorted})
-
-
-@app.post("/api/submit")
-def submit():
-    payload = request.json or {}
-    # expected fields: name, category, prompt, score, elapsed_seconds, response
-    name = payload.get("name", "")
-    category = payload.get("category", "")
-    prompt = payload.get("prompt", "")
-    response_text = payload.get("response", "")
-    score = payload.get("score")
-    elapsed = payload.get("elapsed_seconds")
-
-    # Normalize
-    try:
-        score = int(score) if score is not None else ''
-    except Exception:
-        score = ''
-    try:
-        elapsed = int(elapsed) if elapsed is not None else ''
-    except Exception:
-        elapsed = ''
-
-    base = Path(__file__).resolve().parent
-    csv_path = base / "submissions.csv"
-    # ensure file exists and has header
-    header = ["timestamp", "name", "category", "prompt", "score", "elapsed_seconds", "response"]
-    try:
-        is_new = not csv_path.exists()
-        with open(csv_path, "a", encoding="utf-8", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=header)
-            if is_new:
-                writer.writeheader()
-            writer.writerow({
-                "timestamp": datetime.utcnow().isoformat(),
-                "name": name,
-                "category": category,
-                "prompt": prompt,
-                "score": score,
-                "elapsed_seconds": elapsed,
-                "response": response_text,
-            })
-    except Exception as e:
-        print("Failed to write submission:", e)
-        return jsonify({"ok": False, "error": "failed to save submission"}), 500
-
-    return jsonify({"ok": True})
 
 if __name__ == "__main__":
     app.run(port=5000, debug=True)

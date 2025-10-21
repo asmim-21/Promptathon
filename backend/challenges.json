@@ -1,74 +1,263 @@
 {
   "Wealth Management": {
+    "id": "wm_portfolio_summary",
     "title": "Summarize a client’s portfolio review",
     "task": "Write a prompt that asks an LLM to summarize a client's last quarter portfolio performance, highlight risk exposures, and propose 2 actionable rebalancing suggestions.",
     "examples": [
-      { "input": "Holdings: 40% equities (US large-cap), 40% bonds (IG), 20% cash. Q3 perf: +2.1%" },
-      { "input": "Client risk: Moderate; Constraints: no energy sector >10%" }
+      {
+        "input": "Holdings: 40% equities (US large-cap), 40% bonds (IG), 20% cash. Q3 perf: +2.1%",
+        "output": "Q3 up +2.1% driven by US large-cap equities. Allocation 40/40/20 remains balanced; duration risk limited via IG bonds. Consider trimming overweight mega-cap growth and adding diversified dividends; redeploy cash into short-duration bonds to lock yields."
+      },
+      {
+        "input": "Client risk: Moderate; Constraints: no energy sector >10%",
+        "output": "Client is moderate risk; maintain volatility controls. Keep energy below 10% by using broad equity exposures. Two actions: (1) increase investment-grade ladder by 5% for income stability, (2) add diversified factor ETF to reduce sector concentration."
+      }
+    ],
+    "test_cases": [
+      {
+        "input": "Holdings: 50% equities (US+EU), 35% bonds (IG/short), 15% cash. Q4 performance: +0.9%. Constraint: energy exposure <=8%.",
+        "expected": "Mentions +0.9% in Q4, current 50/35/15 mix, notes energy cap <=8%, highlights risks and gives 2 actionable rebalancing steps."
+      },
+      {
+        "input": "Holdings: 35% equities (EM tilt), 45% bonds (IG long duration), 20% alts. Q1 performance: -1.3%. Risk: Moderate.",
+        "expected": "Summarizes -1.3%, cites EM equity and duration risk, proposes 2 rebalances (e.g., reduce duration, diversify EM) aligned to moderate risk."
+      },
+      {
+        "input": "Holdings: 60% equities, 25% bonds, 15% cash. Q2 performance: +3.4%. Constraint: maintain cash >=10% for near-term needs.",
+        "expected": "States +3.4% with 60/25/15 mix, flags equity concentration risk, preserves cash >=10%, and lists 2 practical rebalancing suggestions."
+      }
     ]
   },
   "Asset Management": {
+    "id": "am_esg_highlights",
     "title": "ESG highlights generator",
     "task": "Create a prompt that turns raw KPI data into a concise ESG summary paragraph for a fund factsheet.",
     "examples": [
-      { "input": "Carbon intensity: -18% vs benchmark; Board diversity: 42%" },
-      { "input": "Engagements: 23; Exclusions: thermal coal >25% revenue" }
+      {
+        "input": "Carbon intensity: -18% vs benchmark; Board diversity: 42%",
+        "output": "The fund’s carbon intensity is 18% below its benchmark, reflecting portfolio decarbonization. Board diversity at 42% supports improved governance and oversight."
+      },
+      {
+        "input": "Engagements: 23; Exclusions: thermal coal >25% revenue",
+        "output": "We conducted 23 engagements focused on climate risk and labor standards. The strategy excludes issuers with >25% thermal-coal revenue, aligning with our transition policy."
+      }
+    ],
+    "test_cases": [
+      {
+        "input": "Scope 1+2 emissions: -12% YoY; Renewable share: 31%; Controversies: none material.",
+        "expected": "One concise paragraph noting -12% emissions YoY, 31% renewables, no material controversies, with clear ESG framing."
+      },
+      {
+        "input": "Gender pay gap: -3pp vs last year; Supply-chain audits: 87% coverage; Water intensity: -9% YoY.",
+        "expected": "Concise paragraph covering pay gap improvement, 87% audit coverage, and water intensity progress."
+      },
+      {
+        "input": "Independent directors: 64%; UNGC signatories: 78% holdings; Climate targets: 55% companies SBTi-aligned.",
+        "expected": "Summary highlighting governance strength (64% independent), UNGC breadth, and >50% SBTi alignment."
+      }
     ]
   },
   "GOTO": {
+    "id": "goto_cheatsheet",
     "title": "Internal knowledge extraction",
     "task": "Design a prompt that converts a long technical guidance document into a one-page cheat sheet with 6 numbered best-practices and a 2-sentence summary.",
     "examples": [
-      { "input": "Doc: 'Data access policy v4.1' ; Audience: junior analysts" },
-      { "input": "Include quick action steps and references to sections" }
+      {
+        "input": "Doc: 'Data access policy v4.1' ; Audience: junior analysts",
+        "output": "Summary (2 sentences) clarifying objective and scope. Then 6 numbered best-practices (least privilege, request workflow, logging, approval steps, data retention, escalation paths)."
+      },
+      {
+        "input": "Include quick action steps and references to sections",
+        "output": "Each best-practice includes an action verb (e.g., 'Request', 'Document') and a section reference (e.g., '§3.2')."
+      }
+    ],
+    "test_cases": [
+      {
+        "input": "Document: 'ML Model Deployment Guide v2.0' Audience: new MLEs",
+        "expected": "2-sentence summary plus exactly 6 numbered best-practices with concrete actions and brief references."
+      },
+      {
+        "input": "Document: 'API Security Standards v1.5' Audience: internal developers",
+        "expected": "Cheat sheet with 2-sentence overview and 6 numbered practices touching auth, rate limits, secrets, logging, testing, incident response."
+      },
+      {
+        "input": "Document: 'Data Retention Policy v3.0' Audience: ops",
+        "expected": "Two-sentence summary and six numbered items referencing sections, including retention periods and deletion workflows."
+      }
     ]
   },
   "Global Markets": {
+    "id": "gm_morning_brief",
     "title": "Market commentary brief",
     "task": "Write a prompt that asks an LLM to produce a 3-paragraph morning market commentary covering FX, rates, and equities with one trading idea per asset class.",
     "examples": [
-      { "input": "FX: USD strength; Rates: 10y yields +12bps; Equities: Tech leads" },
-      { "input": "Region: EMEA; Tone: concise, trading desk" }
+      {
+        "input": "FX: USD strength; Rates: 10y yields +12bps; Equities: Tech leads",
+        "output": "Para 1 (FX): USD firm on rate differentials; idea: fade EUR rallies via options.\nPara 2 (Rates): 10y +12bps on supply; idea: duration hedge via futures.\nPara 3 (Equities): Tech leads on AI; idea: rotate into quality growth with stops."
+      },
+      {
+        "input": "Region: EMEA; Tone: concise, trading desk",
+        "output": "EMEA focus; clipped, desk-style prose; each paragraph ends with a crisp trade idea and risk."
+      }
+    ],
+    "test_cases": [
+      {
+        "input": "FX: GBP softer after CPI miss; Rates: Bund yields +8bps; Equities: banks outperform.",
+        "expected": "Three paragraphs, one each for FX/Rates/Equities, each including one concrete trade idea and risk note."
+      },
+      {
+        "input": "FX: JPY whipsaws on BoJ chatter; Rates: UST curve flattens; Equities: cyclicals lag.",
+        "expected": "3-paragraph format, short desk tone, each with a specific trade suggestion tied to the narrative."
+      },
+      {
+        "input": "FX: EUR steady; Rates: Gilts pressured by supply; Equities: energy gains on oil pop.",
+        "expected": "Mentions all three with trade ideas; concise, EMEA-aware framing acceptable."
+      }
     ]
   },
   "Global Banking": {
+    "id": "gb_deal_teaser",
     "title": "Deal teaser extraction",
     "task": "Craft a prompt to extract the 5 most compelling selling points from a deal teaser PDF, with bullet points capped at 20 words each.",
     "examples": [
-      { "input": "Sector: FinTech; Geography: APAC; Revenue: $120M; Growth: 35% YoY" },
-      { "input": "Differentiators: proprietary fraud engine; 200+ enterprise clients" }
+      {
+        "input": "Sector: FinTech; Geography: APAC; Revenue: $120M; Growth: 35% YoY",
+        "output": "• $120M revenue with 35% YoY growth\n• APAC footprint with strong regulatory relationships\n• Scalable platform with high-margin payments\n• 200+ enterprise clients and 98% retention\n• Proprietary fraud engine reducing false positives"
+      },
+      {
+        "input": "Differentiators: proprietary fraud engine; 200+ enterprise clients",
+        "output": "• Proprietary fraud engine with proven accuracy\n• Enterprise-scale client base (>200) and low churn"
+      }
+    ],
+    "test_cases": [
+      {
+        "input": "Vertical SaaS; ARR $45M; NRR 130%; SOC2 Type II; expanding to EMEA; churn 3%.",
+        "expected": "Exactly 5 bullets, each ≤20 words, emphasizing ARR, NRR, security cred, growth (EMEA), and low churn."
+      },
+      {
+        "input": "B2B payments; TPV $9B; take-rate 65 bps; 30 countries; partnerships with top-10 banks.",
+        "expected": "Five concise bullets capturing TPV, monetization (bps), global reach, and bank partnerships."
+      },
+      {
+        "input": "AI fraud detection; Fortune 500 logos; modular APIs; payback <12 months; gross margin 76%.",
+        "expected": "Five bullets ≤20 words focusing on AI edge, logos, fast payback, high margins, modular APIs."
+      }
     ]
   },
   "Global Research": {
+    "id": "gr_client_summary",
     "title": "Research summary for clients",
     "task": "Design a prompt that converts a long research note into a client-friendly 5-bullet summary plus a 1-line investment implication.",
     "examples": [
-      { "input": "Note: 'Quarterly semiconductor outlook' ; Key charts: 3" },
-      { "input": "Audience: institutional investors; Style: clear, non-technical" }
+      {
+        "input": "Note: 'Quarterly semiconductor outlook' ; Key charts: 3",
+        "output": "• Demand stabilizing in datacenter and AI adjacencies\n• Inventory normalization underway in PCs\n• Foundry capex disciplined\n• Pricing mixed; leaders hold share\n• Watch China subsidy shifts\nImplication: Favor quality semis with AI leverage."
+      },
+      {
+        "input": "Audience: institutional investors; Style: clear, non-technical",
+        "output": "Bullets should avoid jargon and end with a single-line implication linking thesis to positioning."
+      }
+    ],
+    "test_cases": [
+      {
+        "input": "Report: European banks Q4 preview; Topics: NIM, capital returns, credit quality.",
+        "expected": "Five client-friendly bullets plus one-line implication addressing NIM, capital, and credit quality."
+      },
+      {
+        "input": "Note: Global autos EV outlook; Topics: pricing, supply chain, incentives.",
+        "expected": "5 bullets + 1 implication; clear language on pricing pressure, supply risk, incentives."
+      },
+      {
+        "input": "Report: US housing update; Topics: mortgage rates, inventory, affordability.",
+        "expected": "5 bullets + 1 implication; non-technical coverage of rates, supply, affordability."
+      }
     ]
   },
   "Finance": {
+    "id": "fin_kpi_anomalies",
     "title": "KPI anomaly explorer",
     "task": "Create a prompt that asks an LLM to scan a list of monthly KPIs and highlight anomalies, probable causes, and two corrective actions.",
     "examples": [
-      { "input": "KPIs: Revenue -5% MoM; CAC +12% ; Churn stable" },
-      { "input": "Provide confidence level for each cause" }
+      {
+        "input": "KPIs: Revenue -5% MoM; CAC +12% ; Churn stable",
+        "output": "Anomalies: revenue -5%, CAC +12%.\nCauses: weaker funnel conversion; paid mix shift.\nActions: tighten targeting and landing tests; shift budget to high-ROAS channels."
+      },
+      {
+        "input": "Provide confidence level for each cause",
+        "output": "Include a confidence tag (High/Med/Low) for each hypothesized cause."
+      }
+    ],
+    "test_cases": [
+      {
+        "input": "MRR -2% MoM; ARPU flat; NPS -6pts; Refunds +30%; Trials +15%.",
+        "expected": "Calls out anomalies (NPS, refunds), gives probable causes each with confidence, lists two concrete corrective actions."
+      },
+      {
+        "input": "Leads +20%; SQL rate -5pp; Win rate -2pp; Cycle +4 days.",
+        "expected": "Highlights conversion issues; proposes two actions (e.g., lead qual revamp, deal desk support) with rationale."
+      },
+      {
+        "input": "Gross margin -1.8pp; COGS +3%; Utilization -4pp; Overtime +12%.",
+        "expected": "Identifies margin/COGS/utilization anomalies; suggests two corrective actions tied to ops and staffing."
+      }
     ]
   },
   "Compliance": {
+    "id": "comp_policy_qa",
     "title": "Policy Q&A author",
     "task": "Write a prompt to convert a long internal policy into a Q&A with clear, compliance-friendly answers and citations to sections.",
     "examples": [
-      { "input": "Policy: Travel & Expenses v3.2; Sections 4, 7 most asked" },
-      { "input": "Audience: new hires; Tone: plain language" }
+      {
+        "input": "Policy: Travel & Expenses v3.2; Sections 4, 7 most asked",
+        "output": "Q&A formatting with short answers and section citations (e.g., '§4.1')."
+      },
+      {
+        "input": "Audience: new hires; Tone: plain language",
+        "output": "Use plain language, avoid legalese, and cite the exact section for each answer."
+      }
+    ],
+    "test_cases": [
+      {
+        "input": "Policy: 'Code of Conduct v5.0' Focus: gifts, conflicts of interest.",
+        "expected": "Q&A list with cited sections for gifts and conflicts; plain, compliance-approved phrasing."
+      },
+      {
+        "input": "Policy: 'Data Classification v2.3' Topics: labeling, handling restricted data.",
+        "expected": "Q&A with citations on labels and restricted handling; concise and clear."
+      },
+      {
+        "input": "Policy: 'BYOD Policy v1.8' Topics: device security, incident reporting.",
+        "expected": "Q&A format, each answer cites sections; includes incident reporting steps."
+      }
     ]
   },
   "Operations": {
+    "id": "ops_incident_triage",
     "title": "Incident triage checklist",
     "task": "Design a prompt that turns an incident report into a triage checklist: immediate actions, stakeholders to notify, and a 3-step remediation plan.",
     "examples": [
-      { "input": "Incident: 'Backoffice batch job failed at 02:00; error 502'" },
-      { "input": "Systems: Clearing engine, Data lake" }
+      {
+        "input": "Incident: 'Backoffice batch job failed at 02:00; error 502'",
+        "output": "Immediate: restart job, capture logs.\nNotify: ops lead, app owner, SRE on-call.\nRemediation: (1) root-cause logs, (2) fix retry policy, (3) add alert."
+      },
+      {
+        "input": "Systems: Clearing engine, Data lake",
+        "output": "Checklist includes system owners and clear handoffs to affected platforms."
+      }
+    ],
+    "test_cases": [
+      {
+        "input": "Incident: API latency spiked to 2s at 09:15; 5xx at 3%; region: eu-west-1.",
+        "expected": "Checklist with immediate steps, stakeholder notifications, and 3-step remediation tied to latency/5xx in eu-west-1."
+      },
+      {
+        "input": "Incident: Overnight ETL failed at step 4; missing S3 partition; downstream dashboards stale.",
+        "expected": "Immediate actions, notifications (data eng, BI), and 3-step remediation addressing S3 partition and retries."
+      },
+      {
+        "input": "Incident: Payment queue backlog > 50k; consumer errors due to schema mismatch.",
+        "expected": "Triage lists actions, stakeholders, and 3-step fix plan for schema mismatch and backlog drain."
+      }
     ]
   }
 }

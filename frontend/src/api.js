@@ -10,25 +10,16 @@ export async function getChallenges() {
   return r.json();
 }
 
-export async function evaluatePrompt(prompt) {
-  const r = await fetch(`${BASE}/api/evaluate`, {
+export async function gradePrompt({ name, category, prompt, elapsed_seconds }) {
+  const r = await fetch(`${BASE}/api/grade`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ name, category, prompt, elapsed_seconds }),
   });
   return r.json();
 }
 
 export async function getLeaderboard() {
   const r = await fetch(`${BASE}/api/leaderboard`);
-  return r.json();
-}
-
-export async function submitResult(payload) {
-  const r = await fetch(`${BASE}/api/submit`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
   return r.json();
 }
