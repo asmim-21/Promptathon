@@ -10,11 +10,11 @@ export async function getChallenges() {
   return r.json();
 }
 
-export async function gradePrompt({ name, category, prompt, elapsed_seconds }) {
+export async function gradePrompt({ name, email, category, prompt, elapsed_seconds }) {
   const r = await fetch(`${BASE}/api/grade`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, category, prompt, elapsed_seconds }),
+    body: JSON.stringify({ name, email, category, prompt, elapsed_seconds }),
   });
   return r.json();
 }

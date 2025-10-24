@@ -6,6 +6,7 @@ export default function Challenge() {
   const nav = useNavigate();
   const name = sessionStorage.getItem("player:name");
   const category = sessionStorage.getItem("player:category");
+  const email = sessionStorage.getItem("player:email");
 
   const [challenges, setChallenges] = useState({});
   const [prompt, setPrompt] = useState("");
@@ -49,7 +50,7 @@ export default function Challenge() {
     const elapsed_seconds = Math.round((Date.now() - startedAt) / 1000);
 
     try {
-      const res = await gradePrompt({ name, category, prompt: trimmed, elapsed_seconds });
+      const res = await gradePrompt({ name, email, category, prompt: trimmed, elapsed_seconds });
 
       if (!res?.ok) {
         setError(res?.error || "Grading failed");
@@ -73,7 +74,7 @@ export default function Challenge() {
   return (
     <div className="container">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-        <h2 className="title" style={{ textAlign: "left", marginBottom: 0 }}>
+        <h2 className="title" style={{ textAlign: "left", marginBottom: 10 }}>
           {category} — {challenge?.title || "Challenge"}
         </h2>
         <div className="subtitle" style={{ textAlign: "right" }}>
@@ -81,9 +82,9 @@ export default function Challenge() {
         </div>
       </div>
 
-      <p className="subtitle" style={{ marginTop: 8 }}>{challenge?.task}</p>
+      <p className="subtitle" style={{ marginTop: 20 }}> Using the given example inputs, craft a prompt to generate the output </p>
 
-      <div className="grid-2" style={{ marginTop: 12 }}>
+      <div className="grid-2" style={{ marginTop: 20 }}>
         {/* Examples panel: now shows Input + Output (if present) */}
         <div className="panel">
           <h4 style={{ marginTop: 0 }}>Example Inputs & Outputs</h4>

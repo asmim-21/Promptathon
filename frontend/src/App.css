@@ -253,6 +253,46 @@ select.input--compact { appearance: none; -webkit-appearance: none; -moz-appeara
   color: var(--ubs-red);
 }
 
+/* Layout for details form: place Continue button to the right of inputs on wide screens */
+.details-form {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Let the input group take remaining space so the button sits to its right */
+.details-form .inline {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+}
+
+.details-form .continue-btn {
+  /* keep the button's existing sizing but allow it to sit next to the inputs */
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 520px) {
+  /* Stack vertically on small screens */
+  .details-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .details-form .inline {
+    justify-content: center;
+    width: 100%;
+  }
+  .details-form .continue-btn {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
 /* =========
    Utility panels (for Challenge page)
    ========= */

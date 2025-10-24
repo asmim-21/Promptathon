@@ -27,11 +27,11 @@ def ensure_csv_headers():
     if not os.path.exists(RESULTS_SUBMISSIONS_CSV):
         with open(RESULTS_SUBMISSIONS_CSV, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
-            w.writerow(["ts","name","category","challenge_id","title","score","elapsed_seconds","prompt"])
+            w.writerow(["ts","name","email","category","challenge_id","title","score","elapsed_seconds","prompt"])
     if not os.path.exists(RESULTS_CASES_CSV):
         with open(RESULTS_CASES_CSV, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
-            w.writerow(["ts","name","category","challenge_id","case_index","input","expected","model_output","judge_score","judge_reason"])
+            w.writerow(["ts","name","email","category","challenge_id","case_index","input","expected","model_output","judge_score","judge_reason"])
 
 def call_router(messages, temperature=0.2, max_tokens=800):
     if not LLM_BASE_URL:
@@ -146,19 +146,19 @@ def grade_prompt(category: str, user_prompt: str):
         "cases": results
     }
 
-def append_to_csv(result: dict, name: str, category: str, user_prompt: str, elapsed_seconds: int):
+def append_to_csv(result: dict, name: str, email: str, category: str, user_prompt: str, elapsed_seconds: int):
     ensure_csv_headers()
     ts = int(time.time())
     # submissions.csv
     with open(RESULTS_SUBMISSIONS_CSV, "a", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow([ts, name, category, result["challenge_id"], result["title"], result["overall_score"], elapsed_seconds, user_prompt])
+        w.writerow([ts, name, email, category, result["challenge_id"], result["title"], result["overall_score"], elapsed_seconds, user_prompt])
     # cases.csv
     with open(RESULTS_CASES_CSV, "a", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         for c in result["cases"]:
             w.writerow([
-                ts, name, category, result["challenge_id"], c["case_index"],
+                ts, name, email, category, result["challenge_id"], c["case_index"],
                 c["input"], c["expected"], c["model_output"], c["judge_score"], c["judge_reason"]
             ])
 
@@ -192,15 +192,15 @@ def api_grade():
     """
     body = request.get_json(silent=True) or {}
     name = (body.get("name") or "").strip()
+    email = (body.get("email") or "").strip()
     category = body.get("category")
     prompt = (body.get("prompt") or "").strip()
     elapsed_seconds = int(body.get("elapsed_seconds") or 0) 
-
-    if not name or not category or not prompt:
-        return jsonify({"ok": False, "error": "Missing name, category, or prompt"}), 400
+    if not name or not email or not category or not prompt:
+        return jsonify({"ok": False, "error": "Missing name, email, category, or prompt"}), 400
     try:
         result = grade_prompt(category, prompt)
-        append_to_csv(result, name, category, prompt, elapsed_seconds)
+        append_to_csv(result, name, email, category, prompt, elapsed_seconds)
         return jsonify({"ok": True, "score": result["overall_score"], "details": result})
     except requests.Timeout:
         return jsonify({"ok": False, "error": "LLM request timed out"}), 504
@@ -218,7 +218,7 @@ def leaderboard():
                 for r in reader:
                     # parse numeric fields
                     try:
-                        score = int(r.get("score") or 0)
+                        score = float(r.get("score") or 0)
                     except Exception:
                         score = 0
                     try:
@@ -227,6 +227,7 @@ def leaderboard():
                         elapsed = None
                     rows.append({
                         "name": r.get("name") or "",
+                            "email": r.get("email") or "",
                         "category": r.get("category") or "",
                         "prompt": r.get("prompt") or "",
                         "score": score,
